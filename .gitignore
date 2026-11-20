@@ -1,0 +1,10 @@
+__pycache__/
+*.egg-info/
+build/
+dist/
+.venv/
+.pytest_cache/
+dist-installer/
+# local planning docs, not published
+PROJECT_PLAN.md
+INSTALLER_PLAN.md

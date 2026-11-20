@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gp-banner-maker-tool"
+dynamic = ["version"]
+license = { text = "MIT" }
+description = "Grow Pittsburgh event banner builder"
+requires-python = ">=3.11"
+dependencies = [
+    "Pillow",
+    "pillow-heif",
+    "reportlab",
+    "platformdirs",
+    "PySide6",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pymupdf", "pyinstaller", "fonttools"]
+
+[project.scripts]
+gp-banner-maker = "growbanner.app:main"
+gp-banner-batch = "growbanner.batch:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "growbanner.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+growbanner = ["resources/fonts/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
