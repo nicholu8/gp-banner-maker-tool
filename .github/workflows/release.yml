@@ -28,7 +28,10 @@ jobs:
       - name: Test
         env:
           QT_QPA_PLATFORM: offscreen
-        run: python -m pytest -q
+        run: |
+          python -X faulthandler -m pytest -q -p no:cacheprovider
+          Write-Host "pytest exit code: $LASTEXITCODE"
+          exit $LASTEXITCODE
 
       - name: Check tag matches app version
         if: startsWith(github.ref, 'refs/tags/v')
