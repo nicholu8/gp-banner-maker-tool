@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import copy
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QColor, QGuiApplication
 from PySide6.QtWidgets import (
     QCheckBox, QColorDialog, QComboBox, QDialog, QDialogButtonBox, QHBoxLayout, QLabel,
     QLineEdit, QMessageBox, QPushButton, QSpinBox, QTabWidget, QTableWidget, QTableWidgetItem, QVBoxLayout,
@@ -52,6 +52,8 @@ def text_hex(cb: QComboBox) -> str:
 
 
 class SettingsDialog(QDialog):
+    linkReady = Signal(str)  # sign-in link, from the worker thread to the UI thread
+
     def __init__(self, cfg: Config, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Settings")
@@ -66,6 +68,7 @@ class SettingsDialog(QDialog):
         self._disconnect_pending = False
         self._connected_here = False
         self._task: Task | None = None
+        self._auto_copy = False
         if drive.available():
             tabs.addTab(self._drive_tab(), "Google Drive")
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
@@ -96,7 +99,27 @@ class SettingsDialog(QDialog):
     def _drive_tab(self) -> QWidget:
         self.drive_status = QLabel()
         self.drive_btn = QPushButton()
-        self.drive_btn.clicked.connect(self._drive_toggle)
+        self.drive_btn.clicked.connect(lambda: self._drive_toggle(True))
+        self.copy_connect_btn = QPushButton("Connect without opening a browser (copy link)")
+        self.copy_connect_btn.setToolTip(
+            "Use this if your default browser is not the one signed in to your Grow Pittsburgh Google account.")
+        self.copy_connect_btn.clicked.connect(lambda: self._drive_toggle(False))
+        self.link_edit = QLineEdit()
+        self.link_edit.setReadOnly(True)
+        self.link_copy = QPushButton("Copy link")
+        self.link_copy.clicked.connect(self._copy_link)
+        self.link_note = QLabel()
+        self.link_note.setWordWrap(True)
+        self.link_box = QWidget()
+        lb = QVBoxLayout(self.link_box)
+        lb.setContentsMargins(0, 0, 0, 0)
+        lb.addWidget(self.link_note)
+        lrow = QHBoxLayout()
+        lrow.addWidget(self.link_edit, 1)
+        lrow.addWidget(self.link_copy)
+        lb.addLayout(lrow)
+        self.link_box.setVisible(False)
+        self.linkReady.connect(self._show_link)
         self.folder_edit = QLineEdit()
         self.folder_edit.setPlaceholderText("Paste the link to the GP Banners folder")
         if self.cfg.drive_folder_id:
@@ -120,6 +143,8 @@ class SettingsDialog(QDialog):
         row.addWidget(self.drive_status, 1)
         row.addWidget(self.drive_btn)
         lay.addLayout(row)
+        lay.addWidget(self.copy_connect_btn)
+        lay.addWidget(self.link_box)
         lay.addWidget(QLabel("GP Banners folder link"))
         lay.addWidget(self.folder_edit)
         lay.addWidget(self.folder_note)
@@ -133,19 +158,41 @@ class SettingsDialog(QDialog):
         self.drive_status.setText(f"Connected as {self.cfg.drive_email}" if on else "Not connected")
         self.drive_btn.setText("Disconnect" if on else "Connect Google Drive")
         self.drive_btn.setEnabled(self._task is None)
+        self.copy_connect_btn.setVisible(not on)
+        self.copy_connect_btn.setEnabled(self._task is None)
         self.drive_box.setEnabled(on)
         self.folder_edit.setEnabled(on)
         if not on:
             self.drive_box.setChecked(False)
 
-    def _drive_toggle(self):
+    def _drive_toggle(self, open_browser: bool = True):
         if self.cfg.drive_email:  # disconnect (the saved sign-in is erased when Save is clicked)
             self.cfg.drive_email = ""
             self._disconnect_pending = True
             self._paint_drive()
             return
         self.drive_status.setText("Finish signing in in your browser…")
-        self._run(drive.connect, self._connected)
+        self._auto_copy = not open_browser
+        self.link_box.setVisible(False)
+        self._run(lambda: drive.connect(open_browser=open_browser, on_url=self.linkReady.emit), self._connected)
+
+    def _show_link(self, url: str):
+        self.link_edit.setText(url)
+        self.link_copy.setText("Copy link")
+        if self._auto_copy:
+            self._copy_link()
+            self.link_note.setText(
+                "The sign-in link is copied. Paste it into the browser where you are signed in to your "
+                "Grow Pittsburgh Google account, then click Allow. Keep this window open.")
+        else:
+            self.link_note.setText(
+                "A browser window should open. If it is the wrong browser, copy this link and paste it "
+                "into the browser where you are signed in to your Grow Pittsburgh Google account.")
+        self.link_box.setVisible(True)
+
+    def _copy_link(self):
+        QGuiApplication.clipboard().setText(self.link_edit.text())
+        self.link_copy.setText("Copied")
 
     def _run(self, fn, ok):
         self._task = Task(fn)
@@ -156,6 +203,7 @@ class SettingsDialog(QDialog):
 
     def _task_failed(self, msg: str):
         self._task = None
+        self.link_box.setVisible(False)
         self._paint_drive()
         self.folder_note.setText("")
         QMessageBox.warning(self, "Google Drive", msg)
@@ -163,6 +211,7 @@ class SettingsDialog(QDialog):
     def _connected(self, result):
         self._task = None
         _creds, email = result
+        self.link_box.setVisible(False)
         self.cfg.drive_email = email
         self._connected_here = True
         self._disconnect_pending = False

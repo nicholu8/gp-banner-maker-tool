@@ -102,10 +102,28 @@ def build_service(creds):
     return build("drive", "v3", credentials=creds, cache_discovery=False)
 
 
-def connect(open_browser: bool = True, message: str = "") -> tuple[object, str]:
+class _UrlCallback:
+    """Stands in for the library's prompt message: its ``format`` hands the sign-in URL to ``on_url``."""
+
+    def __init__(self, on_url: Callable[[str], None]):
+        self._on_url = on_url
+
+    def format(self, url: str) -> str:
+        self._on_url(url)
+        return ""
+
+
+SIGN_IN_TIMEOUT_S = 300
+
+
+def connect(
+    open_browser: bool = True, message: str = "", on_url: Callable[[str], None] | None = None,
+) -> tuple[object, str]:
     """Browser sign-in. Saves the refresh token. Returns (credentials, signed-in email). Blocks.
 
-    ``open_browser=False`` with ``message="... {url}"`` prints the link instead (for testing)."""
+    ``on_url(url)`` receives the sign-in link so the UI can show or copy it (for people whose
+    default browser is not the one signed in to their Google account). ``open_browser=False``
+    skips opening any browser. Gives up after 5 minutes."""
     cfg = client_config()
     if cfg is None:
         raise DriveError("This build has no Google client configured.")
@@ -113,7 +131,8 @@ def connect(open_browser: bool = True, message: str = "") -> tuple[object, str]:
 
     flow = InstalledAppFlow.from_client_config(cfg, SCOPES)
     creds = flow.run_local_server(
-        port=0, prompt="consent", open_browser=open_browser, authorization_prompt_message=message,
+        port=0, prompt="consent", open_browser=open_browser, timeout_seconds=SIGN_IN_TIMEOUT_S,
+        authorization_prompt_message=_UrlCallback(on_url) if on_url else message,
         success_message="You can close this tab and return to GP Banner Maker Tool.",
     )
     if not creds.refresh_token:
@@ -156,6 +175,8 @@ def friendly_error(e: Exception) -> str:
     name = type(e).__name__
     if name == "RefreshError":
         return "Your Google sign-in expired or was revoked. Reconnect in Settings."
+    if name == "WSGITimeoutError":
+        return "Sign-in timed out. Click Connect and finish signing in within 5 minutes."
     if name == "HttpError":
         status = getattr(getattr(e, "resp", None), "status", "")
         reason = e._get_reason() if hasattr(e, "_get_reason") else str(e)

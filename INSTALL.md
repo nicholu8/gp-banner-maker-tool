@@ -19,7 +19,9 @@ choose PNG/PDF per size.
 
 ## Saving to Google Drive (optional, Grow Pittsburgh staff)
 1. **Settings… > Google Drive > Connect Google Drive**. Your browser opens; sign in with your Grow Pittsburgh
-   Google account and click **Allow**.
+   Google account and click **Allow**. If your default browser is not the one signed in to that account, copy the
+   sign-in link shown in the Settings window (**Copy link**) and paste it into the right browser, or click
+   **Connect without opening a browser (copy link)** to skip the automatic window.
 2. Paste the link to the **GP Banners** folder in the Shared Drive.
 3. Leave **Upload to Drive after export** ticked. Each export is saved on your computer first, then copied to
    `GP Banners / <year>`. If a file with the same name is already there you choose Replace, Keep both or Skip.

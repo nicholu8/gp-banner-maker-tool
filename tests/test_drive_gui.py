@@ -107,3 +107,88 @@ def test_lost_sign_in_gives_reconnect_message(qapp, tmp_path, monkeypatch):
 def test_friendly_errors():
     assert "internet" in drive.friendly_error(ConnectionError("x"))
     assert drive.friendly_error(drive.DriveError("plain")) == "plain"
+
+
+def _dialog(qapp, monkeypatch, tmp_path):
+    from growbanner.settings_dialog import SettingsDialog
+    monkeypatch.setenv("GP_GOOGLE_CLIENT_ID", "cid")
+    monkeypatch.setenv("GP_GOOGLE_CLIENT_SECRET", "sec")
+    return SettingsDialog(Config(check_updates=False))
+
+
+def _wait(qapp, dlg):
+    end = time.time() + 5
+    while time.time() < end and dlg._task is not None:
+        qapp.processEvents()
+        time.sleep(0.01)
+    qapp.processEvents()
+
+
+def test_copy_link_connect_shows_and_copies_link_without_opening_browser(qapp, tmp_path, monkeypatch):
+    seen = {}
+
+    def fake_connect(open_browser=True, message="", on_url=None):
+        seen["open_browser"] = open_browser
+        on_url("https://accounts.google.com/o/oauth2/auth?x=1&y=2")
+        time.sleep(0.2)  # still "waiting for the user" so the link box is visible
+        return None, "a@b.org"
+
+    monkeypatch.setattr(drive, "connect", fake_connect)
+    dlg = _dialog(qapp, monkeypatch, tmp_path)
+    dlg.copy_connect_btn.click()
+    end = time.time() + 2
+    while time.time() < end and not dlg.link_edit.text():
+        qapp.processEvents()
+        time.sleep(0.01)
+    assert seen["open_browser"] is False
+    assert dlg.link_edit.text() == "https://accounts.google.com/o/oauth2/auth?x=1&y=2"
+    assert QApplication.clipboard().text() == dlg.link_edit.text()
+    assert "copied" in dlg.link_note.text().lower()
+    _wait(qapp, dlg)
+    assert dlg.cfg.drive_email == "a@b.org" and dlg.drive_box.isChecked()
+
+
+def test_normal_connect_opens_browser_and_still_offers_the_link(qapp, tmp_path, monkeypatch):
+    seen = {}
+
+    def fake_connect(open_browser=True, message="", on_url=None):
+        seen["open_browser"] = open_browser
+        on_url("https://example.test/auth")
+        time.sleep(0.2)
+        return None, "a@b.org"
+
+    monkeypatch.setattr(drive, "connect", fake_connect)
+    dlg = _dialog(qapp, monkeypatch, tmp_path)
+    dlg.drive_btn.click()
+    end = time.time() + 2
+    while time.time() < end and not dlg.link_edit.text():
+        qapp.processEvents()
+        time.sleep(0.01)
+    assert seen["open_browser"] is True and dlg.link_edit.text() == "https://example.test/auth"
+    assert "wrong browser" in dlg.link_note.text()
+    _wait(qapp, dlg)
+
+
+def test_connect_hands_the_url_to_the_callback(monkeypatch):
+    """drive.connect passes an object whose format() reports the URL (the library calls it with url=...)."""
+    import google_auth_oauthlib.flow as flow
+    got = []
+
+    class FakeFlow:
+        redirect_uri = None
+
+        @classmethod
+        def from_client_config(cls, cfg, scopes):
+            return cls()
+
+        def run_local_server(self, **kw):
+            assert kw["open_browser"] is False and kw["timeout_seconds"] == drive.SIGN_IN_TIMEOUT_S
+            assert kw["authorization_prompt_message"].format(url="https://u") == ""
+            raise drive.DriveError("stop here")
+
+    monkeypatch.setattr(flow, "InstalledAppFlow", FakeFlow)
+    monkeypatch.setenv("GP_GOOGLE_CLIENT_ID", "cid")
+    monkeypatch.setenv("GP_GOOGLE_CLIENT_SECRET", "sec")
+    with pytest.raises(drive.DriveError, match="stop here"):
+        drive.connect(open_browser=False, on_url=got.append)
+    assert got == ["https://u"]
