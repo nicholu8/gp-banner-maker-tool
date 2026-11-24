@@ -13,6 +13,12 @@ class CanvasSize:
     name: str
     width: int
     height: int
+    png: bool = True  # write a PNG for this size
+    pdf: bool = True  # write a PDF (live text) for this size
+
+    @property
+    def file_count(self) -> int:
+        return int(self.png) + int(self.pdf)
 
     @property
     def canvas(self) -> tuple[int, int]:
@@ -27,7 +33,8 @@ class CanvasSize:
         return self.canvas == DEFAULT_CANVAS
 
 
-DEFAULT_SIZE = CanvasSize("Standard", *DEFAULT_CANVAS)
+DEFAULT_SIZE = CanvasSize("Standard", *DEFAULT_CANVAS)  # always exports both PNG and PDF
+DEFAULT_EXTRA_SIZES = (CanvasSize("Square", 1080, 1080),)  # starting extra sizes for a fresh config
 
 
 def valid_dimensions(width: int, height: int) -> bool:

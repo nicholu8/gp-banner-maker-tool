@@ -6,7 +6,7 @@ import csv
 from pathlib import Path
 
 from .config import load_config
-from .export import export_banner
+from .export import export_sizes
 from .schemes import match_scheme
 from .spec import BannerSpec
 
@@ -26,10 +26,11 @@ def run_batch(csv_path: Path, out_dir: Path) -> list[str]:
                     location=row.get("location", ""), cost=row.get("cost", ""), photo_path=photo,
                 )
                 spec.scheme = match_scheme(spec.location, cfg.locations, cfg.other)
-                if row.get("size"):  # optional column: a size name from Settings
-                    spec.canvas = cfg.size_named(row["size"]).canvas
-                res = export_banner(spec, out_dir)
-                summary.append(f"row {i}: {res.png.name}  [{spec.scheme.name} {spec.scheme.banner}]")
+                # optional column: one size name from Settings; otherwise every size in Settings
+                sizes = [cfg.size_named(row["size"])] if row.get("size") else cfg.all_sizes
+                results = export_sizes(spec, sizes, out_dir)
+                names = ", ".join(f.name for r in results for f in r.files)
+                summary.append(f"row {i}: {names}  [{spec.scheme.name} {spec.scheme.banner}]")
             except Exception as e:
                 summary.append(f"row {i}: FAILED ({e})")
     return summary

@@ -18,7 +18,7 @@ from . import __version__
 from .config import Config, load_config, save_config
 from .settings_dialog import SettingsDialog
 from .sizes import CanvasSize
-from .export import export_banner
+from .export import export_label, export_sizes
 from .render import crop_to_canvas, draw_banner, build_layout, load_photo, render_png
 from .schemes import match_scheme, new_rule
 from .spec import BannerSpec
@@ -160,13 +160,13 @@ class MainWindow(QWidget):
 
         open_btn = QPushButton("Open photo…")
         browse = QPushButton("Browse…")
-        self.export_btn = QPushButton("Export PNG + PDF")
+        self.export_btn = QPushButton()
         self.export_btn.setStyleSheet("font-weight:bold;padding:8px")
         self.folder_btn = QPushButton("Open folder")
         self.copy_btn = QPushButton("Copy PNG to clipboard")
 
         form = QFormLayout()
-        form.addRow("Size", self.size_combo)
+        form.addRow("Preview size", self.size_combo)
         form.addRow("Title", self.title)
         form.addRow("Date", self.date)
         form.addRow("Time", self.time)
@@ -221,6 +221,7 @@ class MainWindow(QWidget):
         self.location.currentTextChanged.connect(self.refresh)
         self.nowrap.toggled.connect(self.refresh)
         self.refresh()
+        self.update_export_label()
         self.updater = UpdateChecker()
         self.updater.found.connect(self.show_update)
         if self.cfg.check_updates:
@@ -264,6 +265,9 @@ class MainWindow(QWidget):
             next((i for i, sz in enumerate(self.cfg.all_sizes) if sz.name == select), 0))
         self.size_combo.blockSignals(False)
 
+    def update_export_label(self):
+        self.export_btn.setText(export_label(self.cfg.all_sizes))
+
     def fill_locations(self):
         text = self.location.currentText()
         self.location.blockSignals(True)
@@ -280,6 +284,7 @@ class MainWindow(QWidget):
                 self.update_label.setVisible(False)
             self.fill_locations()
             self.fill_sizes(self.cfg.last_size)
+            self.update_export_label()
             self._crop_cache = None
             self.save_settings()
             self.refresh()
@@ -366,12 +371,15 @@ class MainWindow(QWidget):
             QMessageBox.information(self, "No photo", "Open or drop a photo first.")
             return
         try:
-            res = export_banner(self.spec(), self.outdir.text().strip(), self.full)
+            results = export_sizes(self.spec(), self.cfg.all_sizes, self.outdir.text().strip(), self.full)
         except Exception as e:
             QMessageBox.critical(self, "Export failed", str(e))
             return
-        self.last_export = res
-        self.set_status(f"✔ Saved {res.png.name} and {res.pdf.name}", ok=True)
+        files = [f for r in results for f in r.files]
+        self.last_export = files
+        self.set_status(
+            f"✔ Saved {files[0].name}" if len(files) == 1 else f"✔ Saved {len(files)} files, e.g. {files[0].name}",
+            ok=True)
         self.save_settings()
 
     def open_folder(self):

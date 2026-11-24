@@ -104,6 +104,7 @@ def test_settings_dialog_edits_locations_and_sizes():
     n = dlg.loc_table.rowCount()
     dlg._add_loc_row(new_rule("Hazelwood"))
     dlg.loc_table.cellWidget(0, 1).color = "#010203"
+    dlg.size_table.setRowCount(0)  # drop the starting Square row
     dlg._add_size_row(CanvasSize("Square", 1080, 1080))
     locs, sizes = dlg.collect_locations(), dlg.collect_sizes()
     assert len(locs) == n + 1 and locs[0].banner == "#010203" and locs[-1].banner == OTHER.banner

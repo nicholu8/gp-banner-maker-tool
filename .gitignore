@@ -9,3 +9,5 @@ dist-installer/
 PROJECT_PLAN.md
 INSTALLER_PLAN.md
 PROJECT_NOTES.md
+DRIVE_PLAN.md
+src/growbanner/_google_client.py

@@ -9,7 +9,7 @@ from pathlib import Path
 from platformdirs import user_config_dir, user_documents_dir
 
 from .schemes import DEFAULT_RULES, OTHER, LocationRule, Scheme, new_rule
-from .sizes import DEFAULT_SIZE, CanvasSize, valid_dimensions
+from .sizes import DEFAULT_EXTRA_SIZES, DEFAULT_SIZE, CanvasSize, valid_dimensions
 
 APP_NAME = "GP Banner Maker Tool"
 LEGACY_APP_NAME = "GrowBanner"  # pre-rename settings folder, read once if the new one is missing
@@ -33,7 +33,7 @@ def default_output_dir() -> str:
 class Config:
     locations: list[LocationRule] = field(default_factory=lambda: list(DEFAULT_RULES))
     other: Scheme = OTHER  # colors for locations that are not in the list
-    sizes: list[CanvasSize] = field(default_factory=list)  # extra sizes; the default is built in
+    sizes: list[CanvasSize] = field(default_factory=lambda: list(DEFAULT_EXTRA_SIZES))  # extra sizes; the default is built in
     last_location: str = ""
     last_size: str = DEFAULT_SIZE.name
     check_updates: bool = True
@@ -64,7 +64,10 @@ def _to_json(cfg: Config) -> dict:
             for r in cfg.locations
         ],
         "other": {"banner": cfg.other.banner, "text": cfg.other.text},
-        "sizes": [{"name": s.name, "width": s.width, "height": s.height} for s in cfg.sizes],
+        "sizes": [
+            {"name": s.name, "width": s.width, "height": s.height, "png": s.png, "pdf": s.pdf}
+            for s in cfg.sizes
+        ],
         "last_location": cfg.last_location,
         "last_size": cfg.last_size,
         "check_updates": cfg.check_updates,
@@ -97,11 +100,15 @@ def load_config(path: Path | None = None) -> Config:
         locs += [new_rule(n, cfg.other) for n in data.get("extra_presets", []) if n.lower() not in known]
         if locs:
             cfg.locations = locs
-        cfg.sizes = [
-            CanvasSize(str(d["name"]), int(d["width"]), int(d["height"]))
-            for d in data.get("sizes", [])
-            if valid_dimensions(int(d["width"]), int(d["height"]))
-        ]
+        if "sizes" in data:  # a saved list (even an empty one) replaces the starting extras
+            cfg.sizes = []
+            for d in data["sizes"]:
+                if not valid_dimensions(int(d["width"]), int(d["height"])):
+                    continue
+                png, pdf = bool(d.get("png", True)), bool(d.get("pdf", True))
+                if not (png or pdf):  # at least one type must stay on
+                    png = pdf = True
+                cfg.sizes.append(CanvasSize(str(d["name"]), int(d["width"]), int(d["height"]), png, pdf))
         cfg.last_location = str(data.get("last_location", ""))
         cfg.last_size = str(data.get("last_size", cfg.last_size))
         cfg.check_updates = bool(data.get("check_updates", True))

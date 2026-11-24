@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import copy
 
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QCheckBox, QColorDialog, QComboBox, QDialog, QDialogButtonBox, QHBoxLayout, QLabel,
@@ -153,10 +154,10 @@ class SettingsDialog(QDialog):
 
     # ---- sizes ----
     def _sizes_tab(self) -> QWidget:
-        self.size_table = QTableWidget(0, 3)
-        self.size_table.setHorizontalHeaderLabels(["Name", "Width (px)", "Height (px)"])
+        self.size_table = QTableWidget(0, 5)
+        self.size_table.setHorizontalHeaderLabels(["Name", "Width (px)", "Height (px)", "PNG", "PDF"])
         self.size_table.horizontalHeader().setStretchLastSection(True)
-        self.size_table.setColumnWidth(0, 240)
+        self.size_table.setColumnWidth(0, 200)
         for s in self.cfg.sizes:
             self._add_size_row(s)
         add = QPushButton("Add size")
@@ -170,7 +171,9 @@ class SettingsDialog(QDialog):
         hint = QLabel(
             f"{DEFAULT_SIZE.label} is the built-in default and can't be changed. Extra sizes crop "
             "the photo to the new shape and scale the banner (text, padding, corner) to fit. "
-            "Files for extra sizes get the size added to their name, e.g. my-event-1080x1080.png."
+            "Files for extra sizes get the size added to their name, e.g. my-event-1080x1080.png. "
+            "Every export writes all sizes below, each with only the file types ticked. "
+            "At least one of PNG / PDF must stay ticked."
         )
         hint.setWordWrap(True)
         w = QWidget()
@@ -194,9 +197,27 @@ class SettingsDialog(QDialog):
         t.setItem(i, 0, QTableWidgetItem(s.name))
         t.setCellWidget(i, 1, self._spin(s.width))
         t.setCellWidget(i, 2, self._spin(s.height))
+        png, pdf = QCheckBox(), QCheckBox()
+        png.setChecked(s.png)
+        pdf.setChecked(s.pdf)
+        png.toggled.connect(lambda on, me=png, other=pdf: self._keep_one(on, me, other))
+        pdf.toggled.connect(lambda on, me=pdf, other=png: self._keep_one(on, me, other))
+        for col, box in ((3, png), (4, pdf)):
+            holder = QWidget()
+            hl = QHBoxLayout(holder)
+            hl.setContentsMargins(0, 0, 0, 0)
+            hl.setAlignment(Qt.AlignCenter)
+            hl.addWidget(box)
+            t.setCellWidget(i, col, holder)
         if edit:
             t.setCurrentCell(i, 0)
             t.editItem(t.item(i, 0))
+
+    @staticmethod
+    def _keep_one(on: bool, me: QCheckBox, other: QCheckBox):
+        """Block unticking the last file type of a size."""
+        if not on and not other.isChecked():
+            me.setChecked(True)
 
     def _remove_size_row(self):
         for i in sorted({ix.row() for ix in self.size_table.selectedIndexes()}, reverse=True):
@@ -204,8 +225,12 @@ class SettingsDialog(QDialog):
 
     def collect_sizes(self) -> list[CanvasSize]:
         t = self.size_table
+        def box(i: int, col: int) -> bool:
+            return t.cellWidget(i, col).findChild(QCheckBox).isChecked()
+
         return [
-            CanvasSize(t.item(i, 0).text().strip(), t.cellWidget(i, 1).value(), t.cellWidget(i, 2).value())
+            CanvasSize(t.item(i, 0).text().strip(), t.cellWidget(i, 1).value(),
+                       t.cellWidget(i, 2).value(), box(i, 3), box(i, 4))
             for i in range(t.rowCount())
         ]
 
@@ -219,6 +244,8 @@ class SettingsDialog(QDialog):
             return "Two locations have the same name."
         if any(not s.name for s in sizes):
             return "Every size needs a name (or remove the empty row)."
+        if any(not (s.png or s.pdf) for s in sizes):
+            return "Every size needs PNG or PDF ticked (or remove the row)."
         snames = [s.name.lower() for s in sizes] + [DEFAULT_SIZE.name.lower()]
         if len(set(snames)) != len(snames):
             return f"Size names must be unique (“{DEFAULT_SIZE.name}” is used by the default size)."
