@@ -14,6 +14,9 @@ dependencies = [
     "reportlab",
     "platformdirs",
     "PySide6",
+    "google-api-python-client",
+    "google-auth-oauthlib",
+    "keyring",
 ]
 
 [project.optional-dependencies]

@@ -10,12 +10,15 @@ from PIL import Image
 from PySide6.QtCore import QObject, QRectF, Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QImage, QPainter, QColor
 from PySide6.QtWidgets import (
-    QApplication, QCheckBox, QComboBox, QFileDialog, QFormLayout, QHBoxLayout, QLabel,
+    QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QHBoxLayout, QLabel,
     QLineEdit, QMessageBox, QPushButton, QSlider, QVBoxLayout, QWidget,
 )
 
-from . import __version__
+import queue
+
+from . import __version__, drive
 from .config import Config, load_config, save_config
+from .qtasks import Task
 from .settings_dialog import SettingsDialog
 from .sizes import CanvasSize
 from .export import export_label, export_sizes
@@ -112,7 +115,35 @@ class Preview(QWidget):
         self._last_y = None
 
 
+class CollisionDialog(QDialog):
+    """Same-named file already in the Drive folder: Replace / Keep both / Skip."""
+
+    def __init__(self, name: str, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("File already in Drive")
+        self.choice = drive.Collision.SKIP
+        lay = QVBoxLayout(self)
+        msg = QLabel(f"“{name}” is already in the Drive folder.\nWhat should happen to the new file?")
+        msg.setWordWrap(True)
+        lay.addWidget(msg)
+        self.rest = QCheckBox("Do this for the rest of this upload")
+        lay.addWidget(self.rest)
+        row = QHBoxLayout()
+        for text, choice in (("Replace", drive.Collision.REPLACE), ("Keep both", drive.Collision.KEEP_BOTH),
+                             ("Skip", drive.Collision.SKIP)):
+            b = QPushButton(text)
+            b.clicked.connect(lambda _=False, c=choice: self._pick(c))
+            row.addWidget(b)
+        lay.addLayout(row)
+
+    def _pick(self, choice):
+        self.choice = choice
+        self.accept()
+
+
 class MainWindow(QWidget):
+    collisionAsked = Signal(str)  # worker thread -> UI thread
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle(f"GP Banner Maker Tool v{__version__}")
@@ -121,7 +152,10 @@ class MainWindow(QWidget):
         self.full: Image.Image | None = None
         self.small: Image.Image | None = None
         self._crop_cache: tuple[tuple, Image.Image] | None = None
-        self.last_export = None
+        self.last_export: list[Path] = []
+        self._upload_task: Task | None = None
+        self._answers: queue.Queue = queue.Queue()
+        self._saved_msg = ""
 
         self.preview = Preview()
         self.slider = QSlider(Qt.Vertical)
@@ -164,6 +198,8 @@ class MainWindow(QWidget):
         self.export_btn.setStyleSheet("font-weight:bold;padding:8px")
         self.folder_btn = QPushButton("Open folder")
         self.copy_btn = QPushButton("Copy PNG to clipboard")
+        self.retry_btn = QPushButton("Retry upload to Drive")
+        self.retry_btn.setVisible(False)
 
         form = QFormLayout()
         form.addRow("Preview size", self.size_combo)
@@ -195,6 +231,7 @@ class MainWindow(QWidget):
         row2.addWidget(self.folder_btn)
         row2.addWidget(self.copy_btn)
         side.addLayout(row2)
+        side.addWidget(self.retry_btn)
         side.addWidget(self.status)
 
         main = QHBoxLayout(self)
@@ -213,6 +250,8 @@ class MainWindow(QWidget):
         self.export_btn.clicked.connect(self.do_export)
         self.folder_btn.clicked.connect(self.open_folder)
         self.copy_btn.clicked.connect(self.copy_png)
+        self.retry_btn.clicked.connect(self.start_upload)
+        self.collisionAsked.connect(self.show_collision)
         self.preview.fileDropped.connect(self.load_photo_file)
         self.preview.cropDragged.connect(self.nudge_crop)
         self.slider.valueChanged.connect(self.refresh)
@@ -377,10 +416,58 @@ class MainWindow(QWidget):
             return
         files = [f for r in results for f in r.files]
         self.last_export = files
-        self.set_status(
-            f"✔ Saved {files[0].name}" if len(files) == 1 else f"✔ Saved {len(files)} files, e.g. {files[0].name}",
-            ok=True)
+        self._saved_msg = (
+            f"✔ Saved {files[0].name}" if len(files) == 1 else f"✔ Saved {len(files)} files, e.g. {files[0].name}")
+        self.set_status(self._saved_msg, ok=True)
+        self.retry_btn.setVisible(False)
         self.save_settings()
+        if self.cfg.upload_to_drive:
+            self.start_upload()
+
+    # ---- google drive upload ----
+    def start_upload(self):
+        """Upload the last export's files. Local files are already saved; failures never lose them."""
+        if self._upload_task is not None or not self.last_export:
+            return
+        files, folder_id = list(self.last_export), self.cfg.drive_folder_id
+        policy = drive.CollisionPolicy(self._ask_collision)
+
+        def work():
+            creds = drive.load_credentials()
+            if creds is None:
+                raise drive.DriveError("Google Drive is not connected. Reconnect in Settings.")
+            if not folder_id:
+                raise drive.DriveError("No GP Banners folder link is set. Add it in Settings.")
+            return drive.DriveUploader(drive.build_service(creds), folder_id).upload(files, ask=policy)
+
+        self.set_status(f"{self._saved_msg}\nUploading to Google Drive…")
+        self.retry_btn.setVisible(False)
+        self.export_btn.setEnabled(False)
+        self._upload_task = Task(work)
+        self._upload_task.done.connect(self.upload_done)
+        self._upload_task.failed.connect(self.upload_failed)
+        self._upload_task.start()
+
+    def _ask_collision(self, name: str):
+        """Runs on the worker thread: ask the UI thread and wait for the answer."""
+        self.collisionAsked.emit(name)
+        return self._answers.get()
+
+    def show_collision(self, name: str):
+        dlg = CollisionDialog(name, self)
+        dlg.exec()
+        self._answers.put((dlg.choice, dlg.rest.isChecked()))
+
+    def upload_done(self, report):
+        self._upload_task = None
+        self.export_btn.setEnabled(True)
+        self.set_status(f"{self._saved_msg}\n{report.summary()}", ok=True)
+
+    def upload_failed(self, msg: str):
+        self._upload_task = None
+        self.export_btn.setEnabled(True)
+        self.retry_btn.setVisible(True)
+        self.set_status(f"{self._saved_msg}\nDrive upload failed: {msg}")
 
     def open_folder(self):
         d = Path(self.outdir.text().strip())

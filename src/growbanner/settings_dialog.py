@@ -7,12 +7,14 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QCheckBox, QColorDialog, QComboBox, QDialog, QDialogButtonBox, QHBoxLayout, QLabel,
-    QMessageBox, QPushButton, QSpinBox, QTabWidget, QTableWidget, QTableWidgetItem, QVBoxLayout,
+    QLineEdit, QMessageBox, QPushButton, QSpinBox, QTabWidget, QTableWidget, QTableWidgetItem, QVBoxLayout,
     QWidget,
 )
 
+from . import drive
 from .config import Config
 from .schemes import LocationRule, Scheme, new_rule
+from .qtasks import Task
 from .sizes import DEFAULT_SIZE, MAX_SIDE, MIN_SIDE, CanvasSize
 
 BLACK, WHITE = "#000000", "#FFFFFF"
@@ -60,6 +62,12 @@ class SettingsDialog(QDialog):
         tabs.addTab(self._locations_tab(), "Locations")
         tabs.addTab(self._sizes_tab(), "Sizes")
         tabs.addTab(self._general_tab(), "General")
+        self._orig_email = cfg.drive_email
+        self._disconnect_pending = False
+        self._connected_here = False
+        self._task: Task | None = None
+        if drive.available():
+            tabs.addTab(self._drive_tab(), "Google Drive")
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self._accept)
         buttons.rejected.connect(self.reject)
@@ -72,9 +80,9 @@ class SettingsDialog(QDialog):
         self.updates_box = QCheckBox("Check for new versions when the app starts")
         self.updates_box.setChecked(self.cfg.check_updates)
         note = QLabel(
-            "This is the only time the app uses the internet. It asks GitHub whether a newer "
-            "release exists and sends nothing about you, your photos or your events. "
-            "It never installs anything by itself."
+            "This check asks GitHub whether a newer release exists and sends nothing about you, "
+            "your photos or your events. It never installs anything by itself. The only other "
+            "time the app uses the internet is the optional Google Drive upload (see that tab)."
         )
         note.setWordWrap(True)
         w = QWidget()
@@ -83,6 +91,113 @@ class SettingsDialog(QDialog):
         lay.addWidget(note)
         lay.addStretch()
         return w
+
+    # ---- google drive ----
+    def _drive_tab(self) -> QWidget:
+        self.drive_status = QLabel()
+        self.drive_btn = QPushButton()
+        self.drive_btn.clicked.connect(self._drive_toggle)
+        self.folder_edit = QLineEdit()
+        self.folder_edit.setPlaceholderText("Paste the link to the GP Banners folder")
+        if self.cfg.drive_folder_id:
+            self.folder_edit.setText(f"https://drive.google.com/drive/folders/{self.cfg.drive_folder_id}")
+        self.folder_edit.editingFinished.connect(self._check_folder)
+        self.folder_note = QLabel()
+        self.folder_note.setWordWrap(True)
+        self.drive_box = QCheckBox("Upload to Drive after export")
+        self.drive_box.setChecked(self.cfg.upload_to_drive)
+        note = QLabel(
+            "Optional. After you click Connect, the app can copy each exported PNG and PDF into "
+            "GP Banners / <year> in your Shared Drive. Only the exported files are sent. The "
+            "files are always saved on this computer first, and nothing is uploaded until you "
+            "connect. Your sign-in is kept in Windows Credential Manager, not in the settings file."
+        )
+        note.setWordWrap(True)
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        lay.addWidget(note)
+        row = QHBoxLayout()
+        row.addWidget(self.drive_status, 1)
+        row.addWidget(self.drive_btn)
+        lay.addLayout(row)
+        lay.addWidget(QLabel("GP Banners folder link"))
+        lay.addWidget(self.folder_edit)
+        lay.addWidget(self.folder_note)
+        lay.addWidget(self.drive_box)
+        lay.addStretch()
+        self._paint_drive()
+        return w
+
+    def _paint_drive(self):
+        on = bool(self.cfg.drive_email)
+        self.drive_status.setText(f"Connected as {self.cfg.drive_email}" if on else "Not connected")
+        self.drive_btn.setText("Disconnect" if on else "Connect Google Drive")
+        self.drive_btn.setEnabled(self._task is None)
+        self.drive_box.setEnabled(on)
+        self.folder_edit.setEnabled(on)
+        if not on:
+            self.drive_box.setChecked(False)
+
+    def _drive_toggle(self):
+        if self.cfg.drive_email:  # disconnect (the saved sign-in is erased when Save is clicked)
+            self.cfg.drive_email = ""
+            self._disconnect_pending = True
+            self._paint_drive()
+            return
+        self.drive_status.setText("Finish signing in in your browser…")
+        self._run(drive.connect, self._connected)
+
+    def _run(self, fn, ok):
+        self._task = Task(fn)
+        self._task.done.connect(ok)
+        self._task.failed.connect(self._task_failed)
+        self.drive_btn.setEnabled(False)
+        self._task.start()
+
+    def _task_failed(self, msg: str):
+        self._task = None
+        self._paint_drive()
+        self.folder_note.setText("")
+        QMessageBox.warning(self, "Google Drive", msg)
+
+    def _connected(self, result):
+        self._task = None
+        _creds, email = result
+        self.cfg.drive_email = email
+        self._connected_here = True
+        self._disconnect_pending = False
+        self._paint_drive()
+        self.drive_box.setChecked(True)  # connecting turns uploads on
+        self._check_folder()
+
+    def _check_folder(self):
+        text = self.folder_edit.text().strip()
+        if not text or not self.cfg.drive_email or self._task is not None:
+            self.folder_note.setText("")
+            return
+        fid = drive.parse_folder_id(text)
+        if fid is None:
+            self.folder_note.setText("That does not look like a Google Drive folder link.")
+            return
+        self.folder_note.setText("Checking the folder…")
+
+        def check():
+            creds = drive.load_credentials()
+            if creds is None:
+                raise drive.DriveError("Not connected to Google Drive.")
+            return drive.folder_name(drive.build_service(creds), fid)
+
+        self._run(check, self._folder_ok)
+
+    def _folder_ok(self, name: str):
+        self._task = None
+        self._paint_drive()
+        self.folder_note.setText(f"✔ Found folder “{name}”.")
+
+    def reject(self):
+        if self._connected_here and not self._orig_email:
+            drive.forget_token()  # undo a sign-in that was never saved
+        super().reject()
 
     # ---- locations ----
     def _locations_tab(self) -> QWidget:
@@ -257,6 +372,24 @@ class SettingsDialog(QDialog):
         if err:
             QMessageBox.warning(self, "Check settings", err)
             return
+        if drive.available() and self.cfg.drive_email:
+            link = self.folder_edit.text().strip()
+            fid = drive.parse_folder_id(link) if link else ""
+            if fid is None:
+                QMessageBox.warning(
+                    self, "Check settings", "The GP Banners folder link does not look like a Google Drive folder link.")
+                return
+            if self.drive_box.isChecked() and not fid:
+                QMessageBox.warning(
+                    self, "Check settings",
+                    "Paste the GP Banners folder link, or untick Upload to Drive after export.")
+                return
+            self.cfg.drive_folder_id = fid
+            self.cfg.upload_to_drive = self.drive_box.isChecked()
+        else:
+            self.cfg.upload_to_drive = False
+        if self._disconnect_pending:
+            drive.forget_token()
         self.cfg.locations = locs
         self.cfg.sizes = sizes
         self.cfg.check_updates = self.updates_box.isChecked()

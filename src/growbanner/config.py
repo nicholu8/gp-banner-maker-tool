@@ -38,6 +38,10 @@ class Config:
     last_size: str = DEFAULT_SIZE.name
     check_updates: bool = True
     output_dir: str = field(default_factory=default_output_dir)
+    # Google Drive (opt-in). The refresh token is NOT here: it lives in Windows Credential Manager.
+    drive_email: str = ""  # who is connected (display only); empty = not connected
+    drive_folder_id: str = ""  # the "GP Banners" folder, taken from the link pasted in Settings
+    upload_to_drive: bool = False
 
     @property
     def presets(self) -> list[str]:
@@ -72,6 +76,9 @@ def _to_json(cfg: Config) -> dict:
         "last_size": cfg.last_size,
         "check_updates": cfg.check_updates,
         "output_dir": cfg.output_dir,
+        "drive_email": cfg.drive_email,
+        "drive_folder_id": cfg.drive_folder_id,
+        "upload_to_drive": cfg.upload_to_drive,
     }
 
 
@@ -113,6 +120,9 @@ def load_config(path: Path | None = None) -> Config:
         cfg.last_size = str(data.get("last_size", cfg.last_size))
         cfg.check_updates = bool(data.get("check_updates", True))
         cfg.output_dir = str(data.get("output_dir") or cfg.output_dir)
+        cfg.drive_email = str(data.get("drive_email", ""))
+        cfg.drive_folder_id = str(data.get("drive_folder_id", ""))
+        cfg.upload_to_drive = bool(data.get("upload_to_drive", False)) and bool(cfg.drive_email)
     except Exception:
         return Config()
     return cfg

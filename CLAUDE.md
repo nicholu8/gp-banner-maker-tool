@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Current state
 
-Phases 0–4 plus CSV batch are implemented in `src/growbanner/`; `reference/banner_reference.py` stays untouched. Settings window (location colors, extra output sizes) is done. Installer (Inno Setup), GitHub Actions release workflow and update check are written and tested locally (see `INSTALLER_PLAN.md`); the GitHub repo `nicholu8/gp-banner-maker-tool` is not created/pushed yet. Product name is GP Banner Maker Tool; the Python package stays `growbanner`. The user has confirmed the PDF imports into Canva with editable text, and that HEIC photos work. Not a git repo yet. See `README.md`. `PROJECT_PLAN.md` and `INSTALLER_PLAN.md` are local planning docs that are gitignored (not in the public repo); they may be absent in a fresh clone.
+v1.0.0 is released (repo `nicholu8/gp-banner-maker-tool`, GitHub Actions builds the installer on a `v*` tag). v1.1.0 (in progress/released: check git tags) adds per-size PNG/PDF checkboxes, a default 1080x1080 size, export of all sizes at once, opt-in Google Drive upload (`drive.py`), and a versionless installer name (`GP-Banner-Maker-Tool-Setup.exe`) for a permanent download link. `reference/banner_reference.py` stays untouched. Product name is GP Banner Maker Tool; the Python package stays `growbanner`. The user has confirmed the PDF imports into Canva with editable text, and that HEIC photos work. See `README.md`. `PROJECT_PLAN.md`, `INSTALLER_PLAN.md`, `DRIVE_PLAN.md` and `PROJECT_NOTES.md` are local planning docs that are gitignored; they may be absent in a fresh clone.
 
 ## Commands
 
@@ -39,7 +39,8 @@ Brand colors (banner / text): Braddock `#8DC63F`/black, Shiloh `#FFC20E`/black, 
 ## Standing rules (from PROJECT_PLAN.md §10)
 
 - Do not change colors, fonts, banner geometry, or banner position unless asked.
-- No network calls, telemetry, or LLM/API calls in v1, with ONE exception: the opt-out update check in `updates.py` (anonymous GET of the latest GitHub release tag, no user data, silent on failure, never auto-installs).
+- No network calls, telemetry, or LLM/API calls, with TWO exceptions: (1) the opt-out update check in `updates.py` (anonymous GET of the latest GitHub release tag, no user data, silent on failure, never auto-installs); (2) the opt-in Google Drive upload in `drive.py` (nothing contacted until the user clicks Connect in Settings; sends only the exported PNG/PDF files to the one `GP Banners` Shared Drive folder; refresh token only in Windows Credential Manager via `keyring`, never in `config.json`).
+- The Google OAuth client ID/secret never go in source. Locally: gitignored `src/growbanner/_google_client.py` or env vars `GP_GOOGLE_CLIENT_ID`/`GP_GOOGLE_CLIENT_SECRET`; CI writes the file from repo secrets `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`. Without a client the Drive tab is hidden.
 - Use `pathlib` and `platformdirs`; no hardcoded absolute paths.
 - Any value the user must supply (paths, username, repo name, output folder such as `Documents\GrowPGH Banners`) must be marked clearly as a placeholder; don't assume defaults.
 - Run the test suite and visually inspect a rendered banner (and the rasterized PDF) before declaring any phase done. Golden PNGs come from `banner_reference.py`; regenerate them only with the user's approval.
