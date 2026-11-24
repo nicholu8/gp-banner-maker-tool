@@ -83,8 +83,8 @@ If you export the same title twice, the second set gets a number (`-2`) so nothi
 This copies every banner you make into the shared **GP Banners** folder, in a folder for the year, so the team can find
 them. Your files are always saved on your computer first.
 
-**Before you start:** ask whoever manages the Grow Pittsburgh Shared Drive to give you access to it, and ask them for
-the **link to the GP Banners folder**.
+**Before you start:** your **GP Banner Tool Admin** will give you access to the Grow Pittsburgh Shared Drive and send you
+the **link to the GP Banners folder**. Keep that link handy.
 
 **Set it up (once):**
 1. In the program, click **Settings…**, then the **Google Drive** tab.
@@ -145,11 +145,11 @@ Click **Settings…** to change how the program behaves. Click **Save** when you
 | A note says the photo "will look soft" | The photo is small. The banner still works, but a larger photo looks sharper. |
 | The preview is empty | Add a photo first (drag it in or click **Open photo…**). |
 | Google sign-in page says access is blocked | Make sure you are signed in with your **Grow Pittsburgh** account, not a personal Gmail. |
-| "Can't open that folder" / "Google denied access" | You need to be given access to the Shared Drive. Ask the person who manages it. |
+| "Can't open that folder" / "Google denied access" | You need access to the Shared Drive. Ask your GP Banner Tool Admin. |
 | Upload failed | Check your internet and click **Retry upload to Drive**. Your files are safe on your computer. |
 | "Your Google sign-in expired" | Open Settings > Google Drive, click **Disconnect**, then **Connect Google Drive** again. |
 | Sign-in "timed out" | Click Connect again and finish signing in within 5 minutes. |
-| Any other problem | Take a screenshot and send it to the person who shared this with you. |
+| Any other problem | Take a screenshot and send it to your GP Banner Tool Admin. |
 
 **Uninstall:** Windows **Settings > Apps > Installed apps > GP Banner Maker Tool > Uninstall**. Your banners and
 saved settings are not deleted.
