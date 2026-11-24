@@ -5,6 +5,8 @@ Drop in an event photo, type the details, pick a location, and export a branded 
 (a 1080 x 1080 square to start), each as PNG, PDF or both. Optionally copies the files to a Google Drive folder.
 
 ## Install (for users)
+New to this? Share **[ABOUT.md](ABOUT.md)**: a plain-language guide to installing, making a banner, and setting up Google Drive.
+
 See [INSTALL.md](INSTALL.md). Permanent download link: https://github.com/nicholu8/gp-banner-maker-tool/releases/latest/download/GP-Banner-Maker-Tool-Setup.exe
 
 ## Run from source

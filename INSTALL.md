@@ -1,5 +1,7 @@
 # Installing GP Banner Maker Tool (Windows)
 
+For a step-by-step guide aimed at first-time users (making a banner, Google Drive setup, troubleshooting), see **[ABOUT.md](ABOUT.md)**.
+
 1. Download the installer: **[GP-Banner-Maker-Tool-Setup.exe](https://github.com/nicholu8/gp-banner-maker-tool/releases/latest/download/GP-Banner-Maker-Tool-Setup.exe)**
    (this link always gives the newest version; older versions and notes are on the
    [Releases page](https://github.com/nicholu8/gp-banner-maker-tool/releases)).
