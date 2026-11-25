@@ -416,6 +416,7 @@ class MainWindow(QWidget):
             return
         files = [f for r in results for f in r.files]
         self.last_export = files
+        self.last_title = self.spec().title
         self._saved_msg = (
             f"✔ Saved {files[0].name}" if len(files) == 1 else f"✔ Saved {len(files)} files, e.g. {files[0].name}")
         self.set_status(self._saved_msg, ok=True)
@@ -430,6 +431,7 @@ class MainWindow(QWidget):
         if self._upload_task is not None or not self.last_export:
             return
         files, folder_id = list(self.last_export), self.cfg.drive_folder_id
+        event = getattr(self, "last_title", "")
         policy = drive.CollisionPolicy(self._ask_collision)
 
         def work():
@@ -438,7 +440,7 @@ class MainWindow(QWidget):
                 raise drive.DriveError("Google Drive is not connected. Reconnect in Settings.")
             if not folder_id:
                 raise drive.DriveError("No GP Banners folder link is set. Add it in Settings.")
-            return drive.DriveUploader(drive.build_service(creds), folder_id).upload(files, ask=policy)
+            return drive.DriveUploader(drive.build_service(creds), folder_id).upload(files, ask=policy, event=event)
 
         self.set_status(f"{self._saved_msg}\nUploading to Google Drive…")
         self.retry_btn.setVisible(False)

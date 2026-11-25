@@ -28,7 +28,7 @@ class FakeUploader:
         self.folder_id, self.uploads = folder_id, []
         FakeUploader.instances.append(self)
 
-    def upload(self, files, ask=None, year=None):
+    def upload(self, files, ask=None, year=None, event=""):
         if FakeUploader.fail:
             raise FakeUploader.fail
         self.uploads.append([f.name for f in files])
@@ -192,3 +192,11 @@ def test_connect_hands_the_url_to_the_callback(monkeypatch):
     with pytest.raises(drive.DriveError, match="stop here"):
         drive.connect(open_browser=False, on_url=got.append)
     assert got == ["https://u"]
+
+
+def test_slugify_event_folder():
+    from growbanner.drive import slugify
+
+    assert slugify("How to harvest garlic") == "how-to-harvest-garlic"
+    assert slugify("  Café: Night & Music!! ") == "cafe-night-music"
+    assert slugify("") == ""

@@ -1,5 +1,5 @@
 ; Inno Setup script for GP Banner Maker Tool.
-; Build:  ISCC.exe /DAppVersion=1.1.1 packaging\installer.iss   (see packaging\build.ps1)
+; Build:  ISCC.exe /DAppVersion=1.1.2 packaging\installer.iss   (see packaging\build.ps1)
 ; Expects the PyInstaller output in dist\GPBannerMaker\.
 
 #define AppName "GP Banner Maker Tool"

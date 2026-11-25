@@ -205,6 +205,14 @@ class CollisionPolicy:
         return choice
 
 
+def slugify(title: str) -> str:
+    """'How to harvest garlic!' -> 'how-to-harvest-garlic' (lowercase, ASCII, hyphens)."""
+    import unicodedata
+
+    text = unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode()
+    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:80].strip("-")
+
+
 def _q(name: str) -> str:
     return name.replace("\\", "\\\\").replace("'", "\\'")
 
@@ -241,18 +249,21 @@ class DriveUploader:
         ).execute()
         return resp.get("files", [])
 
-    def year_folder(self, year: int) -> str:
-        """ID of ``<root>/<year>``, created if missing."""
-        name = str(year)
+    def child_folder(self, parent_id: str, name: str) -> str:
+        """ID of the folder ``name`` inside ``parent_id``, created if missing."""
         found = self._list(
-            f"'{self.root}' in parents and name = '{name}' and mimeType = '{FOLDER_MIME}' and trashed = false")
+            f"'{parent_id}' in parents and name = '{_q(name)}' and mimeType = '{FOLDER_MIME}' and trashed = false")
         if found:
             return found[0]["id"]
         made = self.svc.files().create(
-            body={"name": name, "mimeType": FOLDER_MIME, "parents": [self.root]},
+            body={"name": name, "mimeType": FOLDER_MIME, "parents": [parent_id]},
             fields="id", supportsAllDrives=True,
         ).execute()
         return made["id"]
+
+    def year_folder(self, year: int) -> str:
+        """ID of ``<root>/<year>``, created if missing."""
+        return self.child_folder(self.root, str(year))
 
     def find_file(self, folder_id: str, name: str) -> str | None:
         found = self._list(
@@ -274,12 +285,16 @@ class DriveUploader:
 
     def upload(
         self, files: Sequence[Path], ask: Callable[[str], Collision] = lambda _name: Collision.KEEP_BOTH,
-        year: int | None = None,
+        year: int | None = None, event: str = "",
     ) -> UploadReport:
-        """Upload into ``<root>/<year>/``. ``ask(name)`` is called only when a same-named file exists."""
+        """Upload into ``<root>/<year>/<event-slug>/`` (no event folder if the title is empty).
+        ``ask(name)`` is called only when a same-named file exists."""
         year = year or datetime.now().year
-        report = UploadReport(folder=f"{year}")
+        slug = slugify(event)
+        report = UploadReport(folder=f"{year}/{slug}" if slug else f"{year}")
         folder = self.year_folder(year)
+        if slug:
+            folder = self.child_folder(folder, slug)
         for path in map(Path, files):
             name, existing = path.name, self.find_file(folder, path.name)
             if existing:

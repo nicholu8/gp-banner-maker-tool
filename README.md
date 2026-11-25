@@ -36,7 +36,7 @@ Pushes and pull requests to `main` only run the tests.
 ## Google Drive upload (optional)
 Settings > Google Drive: **Connect Google Drive** (browser sign-in; the link is also shown with a Copy button, and a second button connects without opening any browser, OAuth Desktop client, Internal to the Grow Pittsburgh
 Workspace), paste the **GP Banners** folder link, tick **Upload to Drive after export**. Exports are saved locally first, then
-copied to `GP Banners / <year>` (year folder created if missing; Shared Drive supported). A same-named file prompts
+copied to `GP Banners / <year> / <event-title-slug>` (year and event folders created if missing; Shared Drive supported). A same-named file prompts
 Replace / Keep both / Skip; failures keep the local files and show **Retry upload**. Only the exported PNG/PDF files are sent,
 and only after you connect. The refresh token lives in Windows Credential Manager (`keyring`), never in `config.json`.
 Code: `src/growbanner/drive.py` (no GUI imports), wired in `app.py` and `settings_dialog.py`.
