@@ -80,7 +80,7 @@ If you export the same title twice, the second set gets a number (`-2`) so nothi
 
 ## 4. Save to Google Drive (optional, one-time setup)
 
-This copies every banner you make into the shared **GP Banners** folder, in a folder for the year, so the team can find
+This copies every banner you make into the shared **GP Banners** folder, in a folder for the year and then a folder named after the event, so the team can find
 them. Your files are always saved on your computer first.
 
 **Before you start:** your **GP Banner Tool Admin** will give you access to the Grow Pittsburgh Shared Drive and send you
